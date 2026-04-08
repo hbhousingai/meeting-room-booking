@@ -374,7 +374,7 @@ async function apiCall(params) {
   // 如果 APPS_SCRIPT_URL 是 /api/sheets，則使用相對路徑（Vercel 模式）
   // 否則使用絕對路徑（GitHub Pages 模式）
   const url = APPS_SCRIPT_URL.startsWith('http') ? APPS_SCRIPT_URL : APPS_SCRIPT_URL;
-  const r = await fetch(url + '?' + qs);
+  const r = await fetch(url + '?' + qs + '&v=' + Date.now());
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const json = await r.json();
   if (json.error) throw new Error(json.error);
