@@ -366,8 +366,8 @@ let state = {
 // ============================================================
 // API (Google Sheets via /api/sheets proxy or direct GAS URL)
 // ============================================================
-// 注入點：GitHub Action 會在部署時替換下方的字串
-const APPS_SCRIPT_URL = '/api/sheets'; 
+// 注入點：已直接寫入真實 GAS URL 以確保 GitHub Pages 兼容性
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymhiqAg2kD53VyMo64PnXgg95qvSiuAmNWkdtqwh1cG5whWOXRY-6C-euKj5dSQMpfMA/exec'; 
 
 async function apiCall(params) {
   const qs = new URLSearchParams(params).toString();
