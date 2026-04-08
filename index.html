@@ -382,9 +382,34 @@ async function apiCall(params) {
 }
 
 function normalizeRow(obj) {
-  // Google Sheets 可能將數字欄位轉為 number，確保全部為 string
   const out = {};
-  for (const k in obj) out[k] = (obj[k] === null || obj[k] === undefined) ? '' : String(obj[k]);
+  for (const k in obj) {
+    let val = obj[k];
+    if (val === null || val === undefined) {
+      out[k] = '';
+      continue;
+    }
+    
+    // 如果是 ISO 字串 (例如 2026-04-07T16:00:00.000Z)
+    if (typeof val === 'string' && val.includes('T') && val.endsWith('Z')) {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        if (k === 'date') {
+          // 轉換為在地日期 YYYY-MM-DD
+          out[k] = d.getFullYear() + '-' + 
+                   String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(d.getDate()).padStart(2, '0');
+          continue;
+        } else if (k === 'startTime' || k === 'endTime') {
+          // 轉換為在地時間 HH:mm
+          out[k] = String(d.getHours()).padStart(2, '0') + ':' + 
+                   String(d.getMinutes()).padStart(2, '0');
+          continue;
+        }
+      }
+    }
+    out[k] = String(val);
+  }
   return out;
 }
 
