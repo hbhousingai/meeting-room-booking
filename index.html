@@ -155,12 +155,26 @@
     .day-header.weekend { color: #94a3b8; background: #f8fafc; }
     .grid-cell.weekend { background: #fafafa; }
     .grid-cell.weekend:hover { background: #f1f5f9; }
+
+    /* Loading spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
 <!-- Toast -->
 <div id="toast" class="toast"></div>
+
+<!-- LOADING VIEW -->
+<div id="loadingView" style="display:flex; position:fixed; inset:0; background:#f0f4f8; z-index:300; align-items:center; justify-content:center; flex-direction:column; gap:16px;">
+  <div id="loadingSpinner" style="width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div style="font-size:14px;color:#64748b;font-weight:500;">連接 Google Sheets 中...</div>
+  <div id="loadingError" style="display:none;padding:16px 24px;background:white;border-radius:12px;border:1px solid #fecaca;color:#dc2626;font-size:13px;text-align:center;max-width:340px;line-height:1.6;">
+    <div style="font-size:24px;margin-bottom:8px;">⚠️</div>
+    無法連接到 Google Sheets。<br>
+    請確認 <strong>APPS_SCRIPT_URL</strong> 環境變數已在 Vercel 設定，<br>並重新部署後再試。
+  </div>
+</div>
 
 <!-- LOGIN VIEW -->
 <div id="loginView" style="display:none; min-height:100vh; background:linear-gradient(135deg,#1e3a8a,#1e40af,#3b82f6); align-items:center; justify-content:center;">
@@ -353,52 +367,53 @@ let state = {
 };
 
 // ============================================================
-// STORAGE
+// API (Google Sheets via /api/sheets proxy)
 // ============================================================
-function saveData() {
-  localStorage.setItem('mrb_bookings', JSON.stringify(state.bookings));
-  localStorage.setItem('mrb_users', JSON.stringify(state.users));
+async function apiCall(params) {
+  const qs = new URLSearchParams(params).toString();
+  const r = await fetch('/api/sheets?' + qs);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const json = await r.json();
+  if (json.error) throw new Error(json.error);
+  return json;
 }
-function loadData() {
-  state.bookings = JSON.parse(localStorage.getItem('mrb_bookings') || '[]');
-  state.users = JSON.parse(localStorage.getItem('mrb_users') || '[]');
-  if (!state.users.length) initDemoData();
+
+function normalizeRow(obj) {
+  // Google Sheets 可能將數字欄位轉為 number，確保全部為 string
+  const out = {};
+  for (const k in obj) out[k] = (obj[k] === null || obj[k] === undefined) ? '' : String(obj[k]);
+  return out;
 }
-function initDemoData() {
-  state.users = [
-    { id:'u1', name:'系統管理員', email:'admin@org.com', password:'admin123', role:'admin', dept:'資訊部' },
-    { id:'u2', name:'一般使用者', email:'user@org.com',  password:'user123',  role:'user',  dept:'業務部' },
-    { id:'u3', name:'王小明', email:'wang@org.com',  password:'wang123',  role:'user',  dept:'行政部' },
-  ];
-  // Seed some sample bookings for this week
-  const today = new Date();
-  const mon = getWeekStart(today);
-  const fmt = d => d.toISOString().split('T')[0];
-  const addDays = (d,n) => { const r=new Date(d); r.setDate(r.getDate()+n); return r; };
-  state.bookings = [
-    { id:'b1', roomId:'3f-large',   date:fmt(mon),          startTime:'09:00', endTime:'10:00', topic:'資訊會議', applicant:'系統管理員', userId:'u1', note:'', createdAt:new Date().toISOString() },
-    { id:'b2', roomId:'3f-large',   date:fmt(addDays(mon,1)),startTime:'09:30', endTime:'10:00', topic:'業務會議', applicant:'一般使用者', userId:'u2', note:'', createdAt:new Date().toISOString() },
-    { id:'b3', roomId:'3f-large',   date:fmt(addDays(mon,1)),startTime:'11:00', endTime:'12:00', topic:'主管會議', applicant:'王小明',     userId:'u3', note:'', createdAt:new Date().toISOString() },
-    { id:'b4', roomId:'zoom-00',    date:fmt(addDays(mon,2)),startTime:'09:00', endTime:'09:30', topic:'留店會議-中一區', applicant:'一般使用者', userId:'u2', note:'', createdAt:new Date().toISOString() },
-    { id:'b5', roomId:'zoom-01',    date:fmt(addDays(mon,2)),startTime:'10:00', endTime:'11:30', topic:'賴志昶錄課', applicant:'王小明',     userId:'u3', note:'RK.孔', createdAt:new Date().toISOString() },
-    { id:'b6', roomId:'zoom-02',    date:fmt(addDays(mon,2)),startTime:'10:00', endTime:'11:00', topic:'AI生態圈教學 #161', applicant:'系統管理員', userId:'u1', note:'', createdAt:new Date().toISOString() },
-    { id:'b7', roomId:'zoom-00',    date:fmt(addDays(mon,2)),startTime:'16:30', endTime:'17:30', topic:'資訊會議_文忠', applicant:'系統管理員', userId:'u1', note:'', createdAt:new Date().toISOString() },
-    { id:'b8', roomId:'15f-classroom', date:fmt(addDays(mon,3)),startTime:'14:00', endTime:'17:00', topic:'業務發展會議', applicant:'王小明', userId:'u3', note:'', createdAt:new Date().toISOString() },
-  ];
-  saveData();
+
+async function loadData() {
+  const data = await apiCall({ action: 'getAll' });
+  state.bookings = (data.bookings || []).map(normalizeRow);
+  state.users    = (data.users    || []).map(normalizeRow);
 }
 
 // ============================================================
 // AUTH
 // ============================================================
-function doLogin() {
+async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const pass  = document.getElementById('loginPassword').value;
-  const user  = state.users.find(u => u.email === email && u.password === pass);
-  if (!user) { showToast('帳號或密碼錯誤','error'); return; }
-  state.currentUser = user;
-  sessionStorage.setItem('mrb_session', JSON.stringify(user));
-  startApp();
+  if (!email || !pass) { showToast('請輸入帳號與密碼','error'); return; }
+
+  const btn = document.querySelector('#loginView .btn-primary');
+  btn.disabled = true; btn.textContent = '登入中...';
+
+  try {
+    // 密碼在 Apps Script 伺服器端比對，不送到瀏覽器
+    const result = await apiCall({ action: 'login', email, password: pass });
+    if (!result.success) { showToast(result.error || '帳號或密碼錯誤','error'); return; }
+    state.currentUser = result.user;
+    sessionStorage.setItem('mrb_session', JSON.stringify(result.user));
+    startApp();
+  } catch(e) {
+    showToast('登入失敗：' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
 }
 function doLogout() {
   state.currentUser = null;
@@ -1018,7 +1033,7 @@ function renderAdminView() {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
           <div><label class="form-label">Email</label><input id="uEmail" class="form-input" type="email" placeholder="email@org.com"></div>
-          <div><label class="form-label">密碼</label><input id="uPassword" class="form-input" type="password" placeholder="設定密碼"></div>
+          <div><label class="form-label">密碼</label><input id="uPassword" class="form-input" type="password" placeholder="設定密碼（編輯時留空不更改）"></div>
         </div>
         <div style="margin-bottom:16px;">
           <label class="form-label">權限</label>
@@ -1057,32 +1072,52 @@ function editUser(uid) {
   document.getElementById('uRole').value=u.role;
   document.getElementById('userFormArea').scrollIntoView({behavior:'smooth'});
 }
-function saveUser() {
-  const uid = document.getElementById('editUserId').value;
-  const data = {
-    name: document.getElementById('uName').value.trim(),
-    dept: document.getElementById('uDept').value.trim(),
-    email: document.getElementById('uEmail').value.trim(),
-    password: document.getElementById('uPassword').value,
-    role: document.getElementById('uRole').value,
-  };
-  if (!data.name || !data.email || !data.password) { showToast('請填寫必要欄位','error'); return; }
-  if (uid) {
-    const i = state.users.findIndex(u=>u.id===uid);
-    state.users[i] = {...state.users[i], ...data};
-  } else {
-    state.users.push({id:'u'+Date.now(), ...data});
+async function saveUser() {
+  const uid      = document.getElementById('editUserId').value;
+  const name     = document.getElementById('uName').value.trim();
+  const dept     = document.getElementById('uDept').value.trim();
+  const email    = document.getElementById('uEmail').value.trim();
+  const password = document.getElementById('uPassword').value;
+  const role     = document.getElementById('uRole').value;
+
+  if (!name || !email) { showToast('請填寫姓名與 Email','error'); return; }
+  if (!uid && !password) { showToast('新增帳號請設定密碼','error'); return; }
+
+  const saveBtn = document.querySelector('#userFormArea .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '儲存中...'; }
+  try {
+    if (uid) {
+      // 編輯時若密碼欄空白 → 用 keepPassword 標記，Apps Script 保留原密碼
+      const payload = { id: uid, name, dept, email, role,
+        ...(password ? { password } : { keepPassword: true }) };
+      const i = state.users.findIndex(u=>u.id===uid);
+      state.users[i] = { ...state.users[i], name, dept, email, role };
+      await apiCall({ action: 'editUser', data: JSON.stringify(payload) });
+    } else {
+      const user = { id: 'u'+Date.now(), name, dept, email, password, role };
+      state.users.push(user);
+      await apiCall({ action: 'addUser', data: JSON.stringify(user) });
+    }
+    showToast('帳號已儲存', 'success');
+    renderAdminView();
+  } catch(e) {
+    showToast('儲存失敗：' + e.message, 'error');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '儲存'; }
   }
-  saveData();
-  showToast('帳號已儲存');
-  renderAdminView();
 }
-function deleteUser(uid) {
+async function deleteUser(uid) {
   if (!confirm('確定刪除此帳號？')) return;
+  const prev = [...state.users];
   state.users = state.users.filter(u=>u.id!==uid);
-  saveData();
-  showToast('帳號已刪除');
   renderAdminView();
+  try {
+    await apiCall({ action: 'deleteUser', id: uid });
+    showToast('帳號已刪除');
+  } catch(e) {
+    state.users = prev;
+    showToast('刪除失敗：' + e.message, 'error');
+    renderAdminView();
+  }
 }
 
 // ============================================================
@@ -1162,15 +1197,15 @@ function checkConflictPreview() {
   setModalSubtitle();
 }
 
-function saveBooking() {
-  const topic = document.getElementById('bkTopic').value.trim();
-  const applicant = document.getElementById('bkApplicant').value.trim();
-  const date  = document.getElementById('bkDate').value;
-  const roomId= document.getElementById('bkRoom').value;
-  const start = document.getElementById('bkStart').value;
-  const end   = document.getElementById('bkEnd').value;
-  const note  = document.getElementById('bkNote').value.trim();
-  const editId= document.getElementById('editBookingId').value;
+async function saveBooking() {
+  const topic    = document.getElementById('bkTopic').value.trim();
+  const applicant= document.getElementById('bkApplicant').value.trim();
+  const date     = document.getElementById('bkDate').value;
+  const roomId   = document.getElementById('bkRoom').value;
+  const start    = document.getElementById('bkStart').value;
+  const end      = document.getElementById('bkEnd').value;
+  const note     = document.getElementById('bkNote').value.trim();
+  const editId   = document.getElementById('editBookingId').value;
 
   if (!topic || !applicant || !date || !start || !end) {
     showToast('請填寫必要欄位','error'); return;
@@ -1178,39 +1213,56 @@ function saveBooking() {
   if (timeToMins(start) >= timeToMins(end)) {
     showToast('結束時間必須晚於開始時間','error'); return;
   }
-
   const conflicts = getConflicts(roomId, date, start, end, editId);
   if (conflicts.length) {
     if (!confirm(`此時段有衝突（${conflicts[0].topic}），確定仍要儲存？`)) return;
   }
 
-  if (editId) {
-    const i = state.bookings.findIndex(b=>b.id===editId);
-    state.bookings[i] = {...state.bookings[i], roomId, date, startTime:start, endTime:end, topic, applicant, note};
-  } else {
-    state.bookings.push({
-      id: 'b'+Date.now(),
-      roomId, date, startTime:start, endTime:end,
-      topic, applicant, userId: state.currentUser.id, note,
-      createdAt: new Date().toISOString()
-    });
+  const btn = document.querySelector('#bookingModal .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
+
+  const prevBookings = [...state.bookings];
+  try {
+    if (editId) {
+      const i = state.bookings.findIndex(b=>b.id===editId);
+      state.bookings[i] = {...state.bookings[i], roomId, date, startTime:start, endTime:end, topic, applicant, note};
+      await apiCall({ action: 'editBooking', data: JSON.stringify(state.bookings[i]) });
+    } else {
+      const booking = {
+        id: 'b'+Date.now(), roomId, date, startTime:start, endTime:end,
+        topic, applicant, userId: state.currentUser.id, note,
+        createdAt: new Date().toISOString()
+      };
+      state.bookings.push(booking);
+      await apiCall({ action: 'addBooking', data: JSON.stringify(booking) });
+    }
+    closeModal();
+    showToast(editId?'預約已更新':'預約成功 ✓','success');
+    switchView(state.currentView);
+  } catch(e) {
+    state.bookings = prevBookings;
+    showToast('儲存失敗：' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '儲存預約'; }
   }
-  saveData();
-  closeModal();
-  showToast(editId?'預約已更新':'預約成功 ✓','success');
-  switchView(state.currentView);
 }
 
-function deleteBooking() {
+async function deleteBooking() {
   const editId = document.getElementById('editBookingId').value;
   if (!editId) return;
   if (!confirm('確定刪除此預約？')) return;
+  const prev = [...state.bookings];
   state.bookings = state.bookings.filter(b=>b.id!==editId);
-  saveData();
   closeModal();
   closeDetailModal();
-  showToast('預約已刪除');
   switchView(state.currentView);
+  try {
+    await apiCall({ action: 'deleteBooking', id: editId });
+    showToast('預約已刪除');
+  } catch(e) {
+    state.bookings = prev;
+    showToast('刪除失敗：' + e.message, 'error');
+    switchView(state.currentView);
+  }
 }
 
 function closeModal() {
@@ -1276,13 +1328,20 @@ function editBookingFromDetail(id) {
   document.getElementById('bookingModal').style.display='flex';
 }
 
-function deleteBookingById(id) {
+async function deleteBookingById(id) {
   if (!confirm('確定刪除此預約？')) return;
+  const prev = [...state.bookings];
   state.bookings = state.bookings.filter(b=>b.id!==id);
-  saveData();
   closeDetailModal();
-  showToast('預約已刪除');
   switchView(state.currentView);
+  try {
+    await apiCall({ action: 'deleteBooking', id });
+    showToast('預約已刪除');
+  } catch(e) {
+    state.bookings = prev;
+    showToast('刪除失敗：' + e.message, 'error');
+    switchView(state.currentView);
+  }
 }
 
 function closeDetailModal() {
@@ -1373,13 +1432,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // ============================================================
 // INIT
 // ============================================================
-loadData();
-if (checkSession()) {
-  startApp();
-} else {
-  document.getElementById('loginView').style.display = 'flex';
-  document.getElementById('appView').style.display = 'none';
-}
+(async () => {
+  try {
+    await loadData();
+  } catch(e) {
+    document.getElementById('loadingSpinner').style.display = 'none';
+    document.getElementById('loadingError').style.display = 'block';
+    return;
+  }
+  document.getElementById('loadingView').style.display = 'none';
+  if (checkSession()) {
+    startApp();
+  } else {
+    document.getElementById('loginView').style.display = 'flex';
+  }
+})();
 </script>
 </body>
 </html>
