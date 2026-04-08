@@ -24,21 +24,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject APPS_SCRIPT_URL and Cash Buster
+      - name: Inject APPS_SCRIPT_URL and Cache Buster
         run: |
           if [ -z "${{ secrets.APPS_SCRIPT_URL }}" ]; then
             echo "Error: APPS_SCRIPT_URL secret is not set!"
             exit 1
           fi
           
-          # 1. 注入真實 GAS URL
-          sed -i "s|const APPS_SCRIPT_URL = '/api/sheets';|const APPS_SCRIPT_URL = '${{ secrets.APPS_SCRIPT_URL }}';|g" index.html
+          # 1. 注入真實 GAS URL (使用更強健的搜索模式)
+          sed -i "s|const APPS_SCRIPT_URL = .*|const APPS_SCRIPT_URL = '${{ secrets.APPS_SCRIPT_URL }}';|g" index.html
           
-          # 2. 加入 Cache Buster 邏輯 (在 apiCall 中強制加上時間戳記)
+          # 2. 加入 Cache Buster 邏輯
           sed -i "s|url + '?' + qs|url + '?' + qs + '\&v=' + Date.now()|g" index.html
           
           # 3. 更新提示文字
-          sed -i 's|APPS_SCRIPT_URL 環境變數已在 Vercel 設定|APPS_SCRIPT_URL 已透過 GitHub Action 注入|g' index.html
+          sed -i "s|APPS_SCRIPT_URL 環境變數已在 Vercel 設定|APPS_SCRIPT_URL 已透過 GitHub Action 注入|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
