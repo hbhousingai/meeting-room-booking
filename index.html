@@ -372,7 +372,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymhiqAg2kD53Vy
 async function apiCall(params) {
   const qs = new URLSearchParams(params).toString();
   // 增加 v= 防止快取，確保資料即時連動
-  const url = APPS_SCRIPT_URL.startsWith('http') ? APPS_SCRIPT_URL : APPS_SCRIPT_URL;
+  const url = APPS_SCRIPT_URL;
   const r = await fetch(url + '?' + qs + '&v=' + Date.now());
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const json = await r.json();
@@ -394,13 +394,16 @@ function normalizeRow(obj) {
       const d = new Date(val);
       if (!isNaN(d.getTime())) {
         if (k === 'date') {
-          // 直接從字串提取 YYYY-MM-DD 避免時區偏差
-          out[k] = val.split('T')[0];
+          // 使用本地日期而非 UTC，避免日期偏移
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          out[k] = `${y}-${m}-${day}`;
           continue;
         } else if (k === 'startTime' || k === 'endTime') {
-          // 對於時間，也要考慮 Apps Script 傳回的格式
-          out[k] = String(d.getUTCHours()).padStart(2, '0') + ':' + 
-                   String(d.getUTCMinutes()).padStart(2, '0');
+          // 使用本地時間而非 UTC 小時，解決 8 小時偏移問題
+          out[k] = String(d.getHours()).padStart(2, '0') + ':' + 
+                   String(d.getMinutes()).padStart(2, '0');
           continue;
         }
       }
