@@ -158,6 +158,11 @@
 
     /* Loading spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Drag & Drop */
+    .grid-cell.drag-over { background: #dbeafe !important; border: 2px dashed #3b82f6; z-index: 10; }
+    .booking-bar { cursor: grab; }
+    .booking-bar:active { cursor: grabbing; }
   </style>
 </head>
 <body>
@@ -681,8 +686,12 @@ function renderWeekGrid(days, roomId) {
         const spans = calcGridSpan(bk.startTime, bk.endTime);
         const room = getRoom(roomId);
         html += `
-          <div class="grid-cell booked" style="position:relative; grid-column: ${i + 2}; grid-row: ${rowIndex + 2} / span ${spans};" onclick="showBookingDetail('${bk._uiId}')">
-            <div class="booking-bar" style="background:${room.bg};color:${room.color};border-left-color:${room.color};">
+          <div class="grid-cell booked" style="position:relative; grid-column: ${i + 2}; grid-row: ${rowIndex + 2} / span ${spans};" 
+               onclick="showBookingDetail('${bk._uiId}')">
+            <div class="booking-bar" draggable="true" 
+                 ondragstart="handleDragStart(event, '${bk._uiId}')" 
+                 ondragend="handleDragEnd(event)"
+                 style="background:${room.bg};color:${room.color};border-left-color:${room.color};">
               <div class="bk-topic">${bk.topic}</div>
               <div class="bk-user">${bk.startTime}~${bk.endTime}</div>
             </div>
@@ -693,7 +702,12 @@ function renderWeekGrid(days, roomId) {
           timeToMins(b.startTime) < timeToMins(slot) && timeToMins(b.endTime) > timeToMins(slot)
         );
         if (!covered) {
-          html += `<div class="grid-cell" style="${lunchStyle}; grid-column: ${i + 2}; grid-row: ${rowIndex + 2};" onclick="quickBook('${ds}','${slot}','${roomId}')">
+          html += `<div class="grid-cell" 
+            style="${lunchStyle} grid-column: ${i + 2}; grid-row: ${rowIndex + 2};" 
+            onclick="quickBook('${ds}','${slot}','${roomId}')"
+            ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave(event)"
+            ondrop="handleDrop(event, '${ds}', '${slot}', '${roomId}')">
             <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s;" class="add-hint">
               <span style="font-size:16px;color:#3b82f6;">＋</span>
             </div>
@@ -866,14 +880,23 @@ function renderOverviewGrid(date, rooms) {
       );
       if (bk) {
         const spans = calcGridSpan(bk.startTime, bk.endTime);
-        html += `<div class="grid-cell booked" style="grid-column:${roomIndex + 2};grid-row:${rowIndex + 2} / span ${spans};" onclick="showBookingDetail('${bk._uiId}')">
-          <div class="booking-bar" style="background:${r.bg};color:${r.color};border-left-color:${r.color};">
+        html += `<div class="grid-cell booked" style="grid-column:${roomIndex + 2};grid-row:${rowIndex + 2} / span ${spans};" 
+                     onclick="showBookingDetail('${bk._uiId}')">
+          <div class="booking-bar" draggable="true" 
+               ondragstart="handleDragStart(event, '${bk._uiId}')" 
+               ondragend="handleDragEnd(event)"
+               style="background:${r.bg};color:${r.color};border-left-color:${r.color};">
             <div class="bk-topic">${bk.topic}</div>
             <div class="bk-user">${bk.applicant}</div>
           </div>
         </div>`;
       } else if (!covered) {
-        html += `<div class="grid-cell" style="${lunchStyle};grid-column:${roomIndex + 2};grid-row:${rowIndex + 2};" onclick="quickBook('${date}','${slot}','${r.id}')"></div>`;
+        html += `<div class="grid-cell" 
+          style="${lunchStyle};grid-column:${roomIndex + 2};grid-row:${rowIndex + 2};" 
+          onclick="quickBook('${date}','${slot}','${r.id}')"
+          ondragover="handleDragOver(event)"
+          ondragleave="handleDragLeave(event)"
+          ondrop="handleDrop(event, '${date}', '${slot}', '${r.id}')"></div>`;
       }
     });
   });
@@ -1559,6 +1582,90 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('loginPassword')?.addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
   document.getElementById('loginEmail')?.addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 });
+
+// ============================================================
+// DRAG & DROP HANDLERS
+// ============================================================
+function handleDragStart(e, uiId) {
+  e.dataTransfer.setData('text/plain', uiId);
+  e.dataTransfer.effectAllowed = 'move';
+  // Add a slight transparency to the dragged element
+  setTimeout(() => e.target.style.opacity = '0.5', 0);
+}
+
+function handleDragEnd(e) {
+  e.target.style.opacity = '1';
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const cell = e.currentTarget;
+  if (!cell.classList.contains('booked')) {
+    cell.classList.add('drag-over');
+  }
+}
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleDrop(e, targetDate, targetStartTime, targetRoomId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  
+  const uiId = e.dataTransfer.getData('text/plain');
+  const bk = state.bookings.find(b => b._uiId === uiId);
+  if (!bk) return;
+
+  // Check permissions (admin or owner)
+  const isOwn = state.currentUser && (bk.userId === state.currentUser.id || state.currentUser.role === 'admin');
+  if (!isOwn) {
+    showToast('您無權移動此預約', 'error');
+    return;
+  }
+
+  // Calculate new endTime based on original duration
+  const originalDuration = timeToMins(bk.endTime) - timeToMins(bk.startTime);
+  const newStartMins = timeToMins(targetStartTime);
+  const newEndMins = newStartMins + originalDuration;
+  const targetEndTime = minsToTime(newEndMins);
+
+  // Validate end time is within standard slots
+  if (newEndMins > timeToMins(TIME_SLOTS[TIME_SLOTS.length - 1]) + 30) {
+    showToast('移動位置超出時間範圍', 'error');
+    return;
+  }
+
+  // Check conflicts
+  const conflicts = getConflicts(targetRoomId, targetDate, targetStartTime, targetEndTime, bk.id);
+  if (conflicts.length) {
+    if (!confirm(`移動後有時段衝突（${conflicts[0].topic}），確定仍要移動？`)) return;
+  }
+
+  // Preserve previous state for rollback
+  const prevBookings = JSON.parse(JSON.stringify(state.bookings));
+  
+  // Optimistic UI update
+  bk.date = targetDate;
+  bk.startTime = targetStartTime;
+  bk.endTime = targetEndTime;
+  bk.roomId = targetRoomId;
+  
+  switchView(state.currentView);
+  showToast('正在更新預約...', 'info');
+
+  try {
+    const payload = { ...bk };
+    delete payload._uiId; 
+    await apiCall({ action: 'editBooking', data: JSON.stringify(payload) });
+    showToast('移動成功 ✓', 'success');
+  } catch(err) {
+    state.bookings = prevBookings;
+    switchView(state.currentView);
+    showToast('移動失敗：' + err.message, 'error');
+  }
+}
 
 // ============================================================
 // INIT
