@@ -72,13 +72,13 @@
       padding: 3px 6px; font-size: 13px; font-weight: 600;
       overflow: hidden; cursor: pointer; z-index: 5;
       display: flex; flex-direction: column; justify-content: center;
-      border-left: 3px solid rgba(0,0,0,.2);
+      border-left: 4px solid rgba(0,0,0,.25);
       transition: opacity .15s, transform .15s;
       line-height: 1.3;
     }
     .booking-bar:hover { opacity: .9; transform: scale(1.01); }
     .booking-bar .bk-topic { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .booking-bar .bk-user { font-size: 12px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .booking-bar .bk-user { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* Span booking (multi-cell) */
     .span-container { position: relative; }
@@ -344,14 +344,14 @@
 // ============================================================
 const ROOMS = [
   { id:'3f-large',      name:'大會議室',     floor:'3F',   type:'physical', capacity:null,  color:'#008d41', bg:'#e6f4ea' },
-  { id:'3f-medium',     name:'中會議室',     floor:'3F',   type:'physical', capacity:null,  color:'#06b6d4', bg:'#cffafe' },
-  { id:'13f-mobile',    name:'行動會議室',   floor:'13F',  type:'physical', capacity:8,     color:'#8b5cf6', bg:'#ede9fe' },
-  { id:'13f-large',     name:'大會議室',     floor:'13F',  type:'physical', capacity:null,  color:'#6366f1', bg:'#e0e7ff' },
-  { id:'13f-broadcast', name:'直播室',       floor:'13F',  type:'physical', capacity:null,  color:'#ec4899', bg:'#fce7f3' },
-  { id:'15f-classroom', name:'大教室',       floor:'15F',  type:'physical', capacity:null,  color:'#f59e0b', bg:'#fef3c7' },
-  { id:'zoom-00',       name:'ZOOM_00',      floor:'ZOOM', type:'zoom',     capacity:100,   color:'#10b981', bg:'#d1fae5' },
-  { id:'zoom-01',       name:'ZOOM_01',      floor:'ZOOM', type:'zoom',     capacity:300,   color:'#059669', bg:'#a7f3d0' },
-  { id:'zoom-02',       name:'ZOOM_02',      floor:'ZOOM', type:'zoom',     capacity:100,   color:'#0d9488', bg:'#ccfbf1' },
+  { id:'3f-medium',     name:'中會議室',     floor:'3F',   type:'physical', capacity:null,  color:'#0891b2', bg:'#cffafe' },
+  { id:'13f-mobile',    name:'行動會議室',   floor:'13F',  type:'physical', capacity:8,     color:'#6d28d9', bg:'#ede9fe' },
+  { id:'13f-large',     name:'大會議室',     floor:'13F',  type:'physical', capacity:null,  color:'#4338ca', bg:'#e0e7ff' },
+  { id:'13f-broadcast', name:'直播室',       floor:'13F',  type:'physical', capacity:null,  color:'#be185d', bg:'#fce7f3' },
+  { id:'15f-classroom', name:'大教室',       floor:'15F',  type:'physical', capacity:null,  color:'#b45309', bg:'#fef3c7' },
+  { id:'zoom-00',       name:'ZOOM_00',      floor:'ZOOM', type:'zoom',     capacity:100,   color:'#047857', bg:'#d1fae5' },
+  { id:'zoom-01',       name:'ZOOM_01',      floor:'ZOOM', type:'zoom',     capacity:300,   color:'#0f766e', bg:'#a7f3d0' },
+  { id:'zoom-02',       name:'ZOOM_02',      floor:'ZOOM', type:'zoom',     capacity:100,   color:'#065f46', bg:'#ccfbf1' },
 ];
 
 const TIME_SLOTS = [
